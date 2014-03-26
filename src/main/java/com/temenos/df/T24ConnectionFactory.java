@@ -21,16 +21,16 @@ public class T24ConnectionFactory {
 
 	public static void createConnection(int noOfConnection) {
 		T24ConnectionFactory.noOfConnection = noOfConnection;
-		for(int i = 0; i<noOfConnection;i++) {
+		for(int i = 0; i<noOfConnection + 10;i++) {
 			jConnections.add(getT24JConnection());
 		}
 	}
 	
 	
-	public static JConnection getJConnectionFromPool() {
+	public synchronized static JConnection getJConnectionFromPool() {
 		JConnection connection = jConnections.get(currentConnectionIndex);
 		currentConnectionIndex++;
-		if(currentConnectionIndex == noOfConnection) {
+		if(currentConnectionIndex >= noOfConnection) {
 			currentConnectionIndex = 0;
 		}
 		return connection;

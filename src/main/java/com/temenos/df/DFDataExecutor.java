@@ -26,7 +26,8 @@ public class DFDataExecutor {
 	final static int NO_OF_EVENTS_PER_THREAD = Integer.parseInt(Config.get("df.noofeventsperthread"));
 	final static int MAX_NO_OF_THREADS = Integer.parseInt(Config.get("df.thread.max"));
 	final static int DELAY_TIME_IN_SECONDS = Integer.parseInt(Config.get("df.delay.timeinseconds"));
-	
+	static int TOTAL_NO_OF_PROCESSED_RECORDS = 0;
+	static int TOTAL_TIME_FOR_PROCESSING = 0;
 	public static void main(String[] args) throws Exception {
 		T24ConnectionFactory.createConnection(MAX_NO_OF_THREADS);
 		Stopwatch stopwatch = Stopwatch.createUnstarted();
@@ -37,12 +38,14 @@ public class DFDataExecutor {
 			if(checkTasks()) {
 				if(stopwatch.isRunning()) {					
 					stopwatch.stop();
+					TOTAL_TIME_FOR_PROCESSING += stopwatch.elapsed(TimeUnit.SECONDS);
 					logger.debug("======================================");
 					logger.debug("Time Take for complete process " + stopwatch.elapsed(TimeUnit.SECONDS) + " Seconds");
 					logger.debug("Time Take for GetDFData process " + DFDataProcessor.totalGetDFDataTime + " Seconds");
 					logger.debug("Time Take for Transformer process " + DFDataProcessor.totalTransformerTime + " Seconds");
 					logger.debug("Time Take for dbupdate process " + DFDataProcessor.totaldbupdatetime + " Seconds");
 					logger.debug("Time Take for UpdateTimePolled process " + DFDataProcessor.totalUpdateTimePolledTime + " Seconds");
+					logger.debug("Total Time Take to process  " +TOTAL_NO_OF_PROCESSED_RECORDS +" records is " + formatIntoHHMMSS(TOTAL_TIME_FOR_PROCESSING) + " Seconds");
 					logger.debug("======================================");
 					
 					stopwatch.reset();
@@ -56,8 +59,18 @@ public class DFDataExecutor {
 /*				for(String id:ids){
 					logger.debug("ids fetched -" + id);
 				}*/
+				int batchSize = 100;
 				if(ids.size() > 0) {
+					for(int i =0; i<ids.size();i += batchSize) {
+//						System.out.println(i +"_"+ (i + batchSize -1));
+						if((i + batchSize -1) < ids.size()) {
+							updateProcessingDataEventIds(ids.subList(i, (i + batchSize -1)) );
+						} else {
+							updateProcessingDataEventIds(ids.subList(i, (ids.size() -1)) );
+						}
+					}
 					processGetDFData(ids);
+					TOTAL_NO_OF_PROCESSED_RECORDS +=ids.size();
 				} else {
 					Thread.sleep(DELAY_TIME_IN_SECONDS * 1000);
 				}
@@ -79,7 +92,7 @@ public class DFDataExecutor {
 
 		 String query = "";
 		 if(Config.get("df.t24.db").equals("ORACLE")) {
-			 query =  "SELECT RECID FROM \"F_DATA_EVENTS\" WHERE TS IS NULL";
+			 query =  "SELECT RECID FROM \"F_DATA_EVENTS\" WHERE TS IS NULL AND ISPROCESSING IS NULL";
 		 } else {
 			 query = "SELECT DF_DATA_EVENT_ID FROM \"F.DF.DATA.EVENTS\" where TIME_POLLED is null";
 		 }
@@ -124,6 +137,37 @@ public class DFDataExecutor {
 			getDFDataResults.add(executor.submit(dataProcessor));
 		}
 	}
+	
+	
+	private static List<String> updateProcessingDataEventIds(List<String> ids) {
+		try {
+			Class.forName(Config.get("df.t24.jdbc.driverclass"));
+			Connection conn = DriverManager.getConnection(Config.get("df.t24.jdbc.url"), Config.get("df.t24.jdbc.username"), Config.get("df.t24.jdbc.password"));
+			 Statement stmt = conn.createStatement(); 
+			 String updateQuery;
+			 if(Config.get("df.t24.db").equals("ORACLE")) {
+				 updateQuery =  "UPDATE \"F_DATA_EVENTS\" SET ISPROCESSING = CURRENT_TIMESTAMP where RECID in (";
+			 } else {
+				 updateQuery = "UPDATE \"F.DF.DATA.EVENTS\" SET TIME_POLLED = '1393855502.1297' where DF_DATA_EVENT_ID in (";
+			 }
+
+			 for(int i = 0; i<ids.size();i++) {
+				 if(i == ids.size() -1) {
+					 updateQuery = updateQuery + "'"+ids.get(i) + "')";
+			 } else {
+				 updateQuery = updateQuery + "'"+ids.get(i) + "' ,";
+				 }
+			 }
+			 stmt.execute(updateQuery);
+			 
+			 stmt.close();
+			 conn.close();
+		} catch (Exception e) {
+			logger.error("Error while updating T24 event records ", e);
+		}
+
+		return ids;
+	}
 
 	private static boolean checkTasks() throws Exception {
 		
@@ -141,5 +185,19 @@ public class DFDataExecutor {
 		return isAllDone;
 		
 	}
+	
+	static String formatIntoHHMMSS(int secsIn) 
+	{ 
+
+	int hours = secsIn / 3600, 
+	remainder = secsIn % 3600, 
+	minutes = remainder / 60, 
+	seconds = remainder % 60; 
+
+	return ( (hours < 10 ? "0" : "") + hours 
+	+ ":" + (minutes < 10 ? "0" : "") + minutes 
+	+ ":" + (seconds< 10 ? "0" : "") + seconds ); 
+
+	} 
 }
 

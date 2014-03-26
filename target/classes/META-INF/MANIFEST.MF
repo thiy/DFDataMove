@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Built-By: tselvaraj
+Build-Jdk: 1.7.0_21
+Class-Path: lib/log4j-1.2.16.jar lib/jremote-201312.0.0.0.jar lib/jbas
+ ejdbc-5.jar lib/ojdbc6-11.2.0.3.jar lib/sqljdbc4-4.0.jar lib/c3p0-0.9
+ .1.2.jar lib/guava-16.0.1.jar lib/saxon-8.7.jar lib/saxon-dom-8.7.jar
+Main-Class: com.temenos.df.DFDataExecutor
+Created-By: Maven Integration for Eclipse
+
