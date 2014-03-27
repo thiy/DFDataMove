@@ -1,11 +1,10 @@
 package com.temenos.df;
-import java.beans.PropertyVetoException;
-import java.io.InputStream;
+import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.net.MalformedURLException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -14,18 +13,21 @@ import java.util.concurrent.TimeUnit;
 
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Source;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
-import javax.xml.transform.stream.StreamSource;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathFactory;
 
 import org.apache.log4j.Logger;
+import org.apache.solr.client.solrj.SolrServer;
+import org.apache.solr.client.solrj.SolrServerException;
+import org.apache.solr.client.solrj.impl.CommonsHttpSolrServer;
+import org.apache.solr.client.solrj.response.UpdateResponse;
+import org.apache.solr.common.SolrInputDocument;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
@@ -34,7 +36,6 @@ import org.xml.sax.InputSource;
 import com.google.common.base.Stopwatch;
 import com.jbase.jremote.JDynArray;
 import com.jbase.jremote.JSubroutineParameters;
-import com.mchange.v2.c3p0.ComboPooledDataSource;
 
 public class DFDataProcessor implements Runnable {
     private static Logger logger = Logger.getLogger(DFDataProcessor.class);
@@ -70,9 +71,28 @@ public class DFDataProcessor implements Runnable {
 			Statement dimStatement = dimDBConnection.createStatement();
 			Connection selDBConnection = DBConnectionFactory.getSelDBConnection();
 			Statement selStatement = selDBConnection.createStatement();
+			SolrServer server = null;
+			 
+			try {
+				if (Config.get("df.solr.url") != null && Config.get("df.solr.url").trim().length() >0) {
+					server = new CommonsHttpSolrServer(Config.get("df.solr.url"));
+				}
+			} catch (MalformedURLException e1) {
+				logger.error("Error while doing SOLR INSERT  ", e1);
+			}
+			splitXML(dfDataXML, selStatement, dimStatement ,server);
+			try {
+				if(server!= null) {
+					server.commit();
+				}
+			} catch (SolrServerException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 
-			splitXML(dfDataXML, selStatement, dimStatement);
-			
 			if(dimDBConnection != null) {
 				dimDBConnection.close();
 			}
@@ -116,7 +136,7 @@ public class DFDataProcessor implements Runnable {
 	}
 	
 	
-	public void splitXML(String dfDataXML, Statement selStatement, Statement dimStatement) {
+	public void splitXML(String dfDataXML, Statement selStatement, Statement dimStatement, SolrServer server) {
 		DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
 		Document doc;
 		NodeList nodes = null;
@@ -134,7 +154,7 @@ public class DFDataProcessor implements Runnable {
 
 		for (int i = 0; i < nodes.getLength(); i++) {
 			try {
-				transformAndLoad(nodeToString(nodes.item(i)), dimStatement, selStatement);
+				transformAndLoad(nodeToString(nodes.item(i)), dimStatement, selStatement, server);
 			} catch (Exception e) {
 				logger.error("Error while processing ", e);
 			}
@@ -143,15 +163,19 @@ public class DFDataProcessor implements Runnable {
 	}
 	
 	
-	private static boolean transformAndLoad(String selectXML, Statement dimStmt, Statement selStmt) throws Exception {
+	private static boolean transformAndLoad(String selectXML, Statement dimStmt, Statement selStmt, SolrServer solrServer) throws Exception {
 		DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
 		Document doc = dbf.newDocumentBuilder().parse(
 				new InputSource(new StringReader(selectXML)));
 		XPath xpath = XPathFactory.newInstance().newXPath();
-//		NodeList searchNodes = (NodeList) xpath.evaluate("//Search", doc,
-//				XPathConstants.NODESET);
-//		List<String> searchStatements = new ArrayList<String>();
-//		solrInsert(searchStatements);
+		if(solrServer != null)
+		{
+		NodeList searchNodes = (NodeList) xpath.evaluate("//Search", doc,
+				XPathConstants.NODESET);
+		solrInsert(searchNodes, solrServer);
+		}
+		
+		if(selStmt != null)
 		{
 			NodeList selectNodes = (NodeList) xpath.evaluate("//Select", doc, XPathConstants.NODESET);
 			List<String> selectStatements = transformUsingXSLT(selectNodes, XSLTTransformer.DFTransformer.SEL_T24_TO_COMMON.getTransformer(), XSLTTransformer.DFTransformer.SEL_COMMON_TO_DML.getTransformer());
@@ -160,6 +184,7 @@ public class DFDataProcessor implements Runnable {
 			 }
 
 		}
+		if(dimStmt != null)
 		{
 			 NodeList dimNodes = (NodeList) xpath.evaluate("//Dimension", doc, XPathConstants.NODESET);
 			 List<String> dimStatements = transformUsingXSLT(dimNodes, XSLTTransformer.DFTransformer.DIM_T24_TO_COMMON.getTransformer(), XSLTTransformer.DFTransformer.DIM_COMMON_TO_DML.getTransformer());
@@ -190,10 +215,46 @@ public class DFDataProcessor implements Runnable {
 
 		}
 		return true;
-
-		
 	}
 	
+	
+	
+	private static void solrInsert(NodeList searchNodes, SolrServer server)  {
+
+		for (int i = 0; i < searchNodes.getLength(); i++) {
+			String xml;
+			NodeList nodes1 = null;
+			try {
+				xml = nodeToxsltString(searchNodes.item(i), XSLTTransformer.DFTransformer.T24_COMMON_TO_SOLR.getTransformer());
+			DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+			Document doc1 = dbf.newDocumentBuilder().parse(
+					new InputSource(new StringReader(xml)));
+			XPath xpath1 = XPathFactory.newInstance().newXPath();
+			nodes1 = ((NodeList) xpath1.evaluate("//add", doc1,
+					XPathConstants.NODESET)).item(0).getChildNodes();
+			} catch (Exception e) {
+				logger.error("Error while doing SOLR INSERT  ", e);
+			}
+
+			for (int k = 0; k < nodes1.getLength(); k++) {
+				SolrInputDocument document = new SolrInputDocument();
+				NodeList nodes2 = nodes1.item(k).getChildNodes();
+				for (int j = 0; j < nodes2.getLength(); j++) {
+					
+					document.addField(nodes2.item(j).getAttributes().item(0).getTextContent() , nodes2.item(j).getTextContent());
+				}
+				try {
+					server.add(document);
+				} catch (SolrServerException e) {
+					logger.error("Error while doing SOLR INSERT  ", e);
+				} catch (IOException e) {
+					logger.error("Error while doing SOLR INSERT  ", e);
+				}
+			}
+		}
+	}
+
+
 	private static List<String> transformUsingXSLT(NodeList nodes, Transformer t24ToCommonTransformer, Transformer commonToDBTransformer) throws Exception {
 		
 		List<String> sqls = new ArrayList<String>();
@@ -245,7 +306,6 @@ public class DFDataProcessor implements Runnable {
 		return flag;
 	}
 	
-
 	private static String nodeToString(Node node) {
 		StringWriter sw = new StringWriter();
 		try {
@@ -256,6 +316,7 @@ public class DFDataProcessor implements Runnable {
 		} catch (TransformerException te) {
 			logger.error("nodeToString Transformer Exception ", te);
 		}
+		
 		return sw.toString();
 	}
 

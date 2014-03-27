@@ -20,13 +20,13 @@ public class T24Utils {
 
     private static Logger logger = Logger.getLogger(T24Utils.class);
 	
-	static ComboPooledDataSource dimCPDS = getDimConnectionDS();
+	static ComboPooledDataSource dimCPDS = null; //getDimConnectionDS();
 
     
 	public static void main(String[] args) throws Exception {
 
-//		resetTimePolledColumn();
-		testJDBC();
+		resetTimePolledColumn();
+//		testJDBC();
 		
 	}
 	

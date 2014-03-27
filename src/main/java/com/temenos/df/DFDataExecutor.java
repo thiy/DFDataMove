@@ -61,14 +61,14 @@ public class DFDataExecutor {
 				}*/
 				int batchSize = 100;
 				if(ids.size() > 0) {
-					for(int i =0; i<ids.size();i += batchSize) {
+		/*			for(int i =0; i<ids.size();i += batchSize) {
 //						System.out.println(i +"_"+ (i + batchSize -1));
 						if((i + batchSize -1) < ids.size()) {
 							updateProcessingDataEventIds(ids.subList(i, (i + batchSize -1)) );
 						} else {
 							updateProcessingDataEventIds(ids.subList(i, (ids.size() -1)) );
 						}
-					}
+					}*/
 					processGetDFData(ids);
 					TOTAL_NO_OF_PROCESSED_RECORDS +=ids.size();
 				} else {
@@ -92,7 +92,7 @@ public class DFDataExecutor {
 
 		 String query = "";
 		 if(Config.get("df.t24.db").equals("ORACLE")) {
-			 query =  "SELECT RECID FROM \"F_DATA_EVENTS\" WHERE TS IS NULL AND ISPROCESSING IS NULL";
+			 query =  "SELECT RECID FROM \"F_DATA_EVENTS\" WHERE TS IS NULL"; // AND ISPROCESSING IS NULL
 		 } else {
 			 query = "SELECT DF_DATA_EVENT_ID FROM \"F.DF.DATA.EVENTS\" where TIME_POLLED is null";
 		 }
@@ -140,32 +140,34 @@ public class DFDataExecutor {
 	
 	
 	private static List<String> updateProcessingDataEventIds(List<String> ids) {
-		try {
-			Class.forName(Config.get("df.t24.jdbc.driverclass"));
-			Connection conn = DriverManager.getConnection(Config.get("df.t24.jdbc.url"), Config.get("df.t24.jdbc.username"), Config.get("df.t24.jdbc.password"));
-			 Statement stmt = conn.createStatement(); 
-			 String updateQuery;
-			 if(Config.get("df.t24.db").equals("ORACLE")) {
-				 updateQuery =  "UPDATE \"F_DATA_EVENTS\" SET ISPROCESSING = CURRENT_TIMESTAMP where RECID in (";
-			 } else {
-				 updateQuery = "UPDATE \"F.DF.DATA.EVENTS\" SET TIME_POLLED = '1393855502.1297' where DF_DATA_EVENT_ID in (";
-			 }
-
-			 for(int i = 0; i<ids.size();i++) {
-				 if(i == ids.size() -1) {
-					 updateQuery = updateQuery + "'"+ids.get(i) + "')";
-			 } else {
-				 updateQuery = updateQuery + "'"+ids.get(i) + "' ,";
+		if(ids.size() > 0) {
+			try {
+				Class.forName(Config.get("df.t24.jdbc.driverclass"));
+				Connection conn = DriverManager.getConnection(Config.get("df.t24.jdbc.url"), Config.get("df.t24.jdbc.username"), Config.get("df.t24.jdbc.password"));
+				 Statement stmt = conn.createStatement(); 
+				 String updateQuery;
+				 if(Config.get("df.t24.db").equals("ORACLE")) {
+					 updateQuery =  "UPDATE \"F_DATA_EVENTS\" SET ISPROCESSING = CURRENT_TIMESTAMP where RECID in (";
+				 } else {
+					 updateQuery = "UPDATE \"F.DF.DATA.EVENTS\" SET TIME_POLLED = '1393855502.1297' where DF_DATA_EVENT_ID in (";
 				 }
-			 }
-			 stmt.execute(updateQuery);
-			 
-			 stmt.close();
-			 conn.close();
-		} catch (Exception e) {
-			logger.error("Error while updating T24 event records ", e);
+	
+				 for(int i = 0; i<ids.size();i++) {
+					 if(i == ids.size() -1) {
+						 updateQuery = updateQuery + "'"+ids.get(i) + "')";
+				 } else {
+					 updateQuery = updateQuery + "'"+ids.get(i) + "' ,";
+					 }
+				 }
+				 System.out.println(updateQuery);
+				 stmt.execute(updateQuery);
+				 
+				 stmt.close();
+				 conn.close();
+			} catch (Exception e) {
+				logger.error("Error while updating T24 event records ", e);
+			}
 		}
-
 		return ids;
 	}
 

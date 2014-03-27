@@ -13,7 +13,11 @@ import org.apache.log4j.Logger;
 public class XSLTTransformer {
 
 	public static enum DFTransformer {
-		DIM_T24_TO_COMMON("DIM_T24_TO_COMMON"),SEL_T24_TO_COMMON("SEL_T24_TO_COMMON"),DIM_COMMON_TO_DML("DIM_COMMON_TO_DML"),SEL_COMMON_TO_DML("SEL_COMMON_TO_DML");
+		DIM_T24_TO_COMMON("DIM_T24_TO_COMMON"),
+		SEL_T24_TO_COMMON("SEL_T24_TO_COMMON"),
+		DIM_COMMON_TO_DML("DIM_COMMON_TO_DML"),
+		SEL_COMMON_TO_DML("SEL_COMMON_TO_DML"),
+		T24_COMMON_TO_SOLR("T24_COMMON_TO_SOLR");
 		
 		String type;	
 		Transformer transformer;
@@ -26,6 +30,8 @@ public class XSLTTransformer {
 				transformer = dimCommonToDBTransformer;
 			} else if(type.endsWith("SEL_COMMON_TO_DML")) {	
 				transformer = selectCommonToDBTransformer;
+			} else if(type.endsWith("T24_COMMON_TO_SOLR")) {	
+				transformer = solrCommonToDBTransformer;
 			}
 		}
 		public Transformer getTransformer() {
@@ -43,6 +49,7 @@ public class XSLTTransformer {
 	
 	private static Transformer selectT24ToCommonTransformer = getxsltTransformer("xslts/selectT24xmlToCommonxml.xslt");
 	private static Transformer selectCommonToDBTransformer = getxsltTransformer(DB.SELECT);
+	private static Transformer solrCommonToDBTransformer = getxsltTransformer("xslts/t24xmlToSolrxml.xslt");
 	
 
 	private static Transformer getxsltTransformer(DB db) {
