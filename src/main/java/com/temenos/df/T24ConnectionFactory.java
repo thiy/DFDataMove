@@ -21,7 +21,7 @@ public class T24ConnectionFactory {
 
 	public static void createConnection(int noOfConnection) {
 		T24ConnectionFactory.noOfConnection = noOfConnection;
-		for(int i = 0; i<noOfConnection + 10;i++) {
+		for(int i = 0; i<noOfConnection + 5;i++) { //+ 10
 			jConnections.add(getT24JConnection());
 		}
 	}

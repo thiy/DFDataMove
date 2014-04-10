@@ -93,8 +93,11 @@ public class DFDataExecutor {
 		 String query = "";
 		 if(Config.get("df.t24.db").equals("ORACLE")) {
 			 query =  "SELECT RECID FROM \"F_DATA_EVENTS\" WHERE TS IS NULL"; // AND ISPROCESSING IS NULL
+		 } else if(Config.get("df.t24.db").trim().equals("MSSQL")) {
+				 query =  "SELECT RECID FROM \"F_DATA_EVENTS\" WHERE TS IS NULL"; // AND ISPROCESSING IS NULL
 		 } else {
 			 query = "SELECT DF_DATA_EVENT_ID FROM \"F.DF.DATA.EVENTS\" where TIME_POLLED is null";
+//			 query = "SELECT DF_DATA_EVENT_ID FROM \"F.DF.DATA.EVENTS\" where TIME_POLLED is null";
 		 }
 		 ResultSet rset = stmt.executeQuery (query); 
 		 int i = 1;
@@ -149,7 +152,8 @@ public class DFDataExecutor {
 				 if(Config.get("df.t24.db").equals("ORACLE")) {
 					 updateQuery =  "UPDATE \"F_DATA_EVENTS\" SET ISPROCESSING = CURRENT_TIMESTAMP where RECID in (";
 				 } else {
-					 updateQuery = "UPDATE \"F.DF.DATA.EVENTS\" SET TIME_POLLED = '1393855502.1297' where DF_DATA_EVENT_ID in (";
+					 updateQuery =  "UPDATE \"F_DATA_EVENTS\" SET ISPROCESSING = CURRENT_TIMESTAMP where RECID in (";
+//					 updateQuery = "UPDATE \"F.DF.DATA.EVENTS\" SET TIME_POLLED = '1393855502.1297' where DF_DATA_EVENT_ID in (";
 				 }
 	
 				 for(int i = 0; i<ids.size();i++) {

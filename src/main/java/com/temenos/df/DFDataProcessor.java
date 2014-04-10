@@ -26,7 +26,6 @@ import org.apache.log4j.Logger;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.impl.CommonsHttpSolrServer;
-import org.apache.solr.client.solrj.response.UpdateResponse;
 import org.apache.solr.common.SolrInputDocument;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -36,6 +35,7 @@ import org.xml.sax.InputSource;
 import com.google.common.base.Stopwatch;
 import com.jbase.jremote.JDynArray;
 import com.jbase.jremote.JSubroutineParameters;
+import com.temenos.df.XSLTTransformer.DB;
 
 public class DFDataProcessor implements Runnable {
     private static Logger logger = Logger.getLogger(DFDataProcessor.class);
@@ -114,23 +114,25 @@ public class DFDataProcessor implements Runnable {
 			
 			synchronized (DFDataProcessor.class) {
 				
-			if(dbupdatetime > totaldbupdatetime) {
-				totaldbupdatetime = dbupdatetime;
-			}
-			if((processStopwatch.elapsed(TimeUnit.SECONDS) - dbupdatetime) > totalTransformerTime) {
-				totalTransformerTime = (processStopwatch.elapsed(TimeUnit.SECONDS) - dbupdatetime);
-			}
-			if( getDFDataStopwatch.elapsed(TimeUnit.SECONDS) > totalGetDFDataTime) {
-				totalGetDFDataTime =  getDFDataStopwatch.elapsed(TimeUnit.SECONDS);
-			}
-			if(updateTimepolledStopwatch.elapsed(TimeUnit.SECONDS) > totalUpdateTimePolledTime) {
-				totalUpdateTimePolledTime = updateTimepolledStopwatch.elapsed(TimeUnit.SECONDS);
-			}
+				if(dbupdatetime > totaldbupdatetime) {
+					totaldbupdatetime = dbupdatetime;
+				}
+				if((processStopwatch.elapsed(TimeUnit.SECONDS) - dbupdatetime) > totalTransformerTime) {
+					totalTransformerTime = (processStopwatch.elapsed(TimeUnit.SECONDS) - dbupdatetime);
+				}
+				if( getDFDataStopwatch.elapsed(TimeUnit.SECONDS) > totalGetDFDataTime) {
+					totalGetDFDataTime =  getDFDataStopwatch.elapsed(TimeUnit.SECONDS);
+				}
+				if(updateTimepolledStopwatch.elapsed(TimeUnit.SECONDS) > totalUpdateTimePolledTime) {
+					totalUpdateTimePolledTime = updateTimepolledStopwatch.elapsed(TimeUnit.SECONDS);
+				}
+				
 			}
 			
 			
 		} catch (Exception e) {
-			logger.error("Error while processing the data ---- "+ e.getMessage());
+			e.printStackTrace();
+			logger.error("Error while processing the data ---- "+ e);
 
 		}
 	}
@@ -151,7 +153,7 @@ public class DFDataProcessor implements Runnable {
 			e.printStackTrace();
 		}
 		
-
+//logger.debug("No of transaction = "  + nodes.getLength());
 		for (int i = 0; i < nodes.getLength(); i++) {
 			try {
 				transformAndLoad(nodeToString(nodes.item(i)), dimStatement, selStatement, server);
@@ -172,22 +174,35 @@ public class DFDataProcessor implements Runnable {
 		{
 		NodeList searchNodes = (NodeList) xpath.evaluate("//Search", doc,
 				XPathConstants.NODESET);
-		solrInsert(searchNodes, solrServer);
+			if(searchNodes != null && searchNodes.getLength() > 0) {
+				solrInsert(searchNodes, solrServer);
+			}
+		} else {
+//			logger.debug("skiping Solr");
+
 		}
 		
 		if(selStmt != null)
 		{
 			NodeList selectNodes = (NodeList) xpath.evaluate("//Select", doc, XPathConstants.NODESET);
-			List<String> selectStatements = transformUsingXSLT(selectNodes, XSLTTransformer.DFTransformer.SEL_T24_TO_COMMON.getTransformer(), XSLTTransformer.DFTransformer.SEL_COMMON_TO_DML.getTransformer());
-			 if(!jdbcInsert(selectStatements, selStmt, "SELECT")) {
-//				 return false;
-			 }
+			if(selectNodes != null && selectNodes.getLength() > 0) {
+	
+//				List<String> selectStatements = transformUsingXSLT(selectNodes, XSLTTransformer.DFTransformer.SEL_T24_TO_COMMON.getTransformer(), XSLTTransformer.DFTransformer.SEL_COMMON_TO_DML.getTransformer());
+//				 if(!jdbcInsert(selectStatements, selStmt, "SELECT")) {
+	//				 return false;
+//				 }
+			}
+		} else {
+//			logger.debug("skiping select");
 
 		}
 		if(dimStmt != null)
 		{
+
 			 NodeList dimNodes = (NodeList) xpath.evaluate("//Dimension", doc, XPathConstants.NODESET);
-			 List<String> dimStatements = transformUsingXSLT(dimNodes, XSLTTransformer.DFTransformer.DIM_T24_TO_COMMON.getTransformer(), XSLTTransformer.DFTransformer.DIM_COMMON_TO_DML.getTransformer());
+				if(dimNodes != null && dimNodes.getLength() > 0) {
+
+			 List<String> dimStatements = transformUsingXSLT(dimNodes, XSLTTransformer.getxsltTransformer("xslts/dimT24xmlToCommonxml.xslt"), XSLTTransformer.getxsltTransformer(DB.DIM));
 			 boolean dimFlag = false;
 			 boolean factFlag = false;
 			 for(String dimSql:dimStatements) {
@@ -208,11 +223,14 @@ public class DFDataProcessor implements Runnable {
 					 }
 				 }
 			 }
-
+			 
+//			 logger.debug("Inserting "+ dimStatements.size() + " statements");
 			 if(!jdbcInsert(dimStatements, dimStmt, "DIM")) {
 //				 return false;
 			 }
-
+			}
+		} else {
+			logger.debug("skiping dim");
 		}
 		return true;
 	}
@@ -222,10 +240,10 @@ public class DFDataProcessor implements Runnable {
 	private static void solrInsert(NodeList searchNodes, SolrServer server)  {
 
 		for (int i = 0; i < searchNodes.getLength(); i++) {
-			String xml;
+			String xml = null;
 			NodeList nodes1 = null;
 			try {
-				xml = nodeToxsltString(searchNodes.item(i), XSLTTransformer.DFTransformer.T24_COMMON_TO_SOLR.getTransformer());
+//				xml = nodeToxsltString(searchNodes.item(i), XSLTTransformer.DFTransformer.T24_COMMON_TO_SOLR.getTransformer());
 			DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
 			Document doc1 = dbf.newDocumentBuilder().parse(
 					new InputSource(new StringReader(xml)));
@@ -259,6 +277,10 @@ public class DFDataProcessor implements Runnable {
 		
 		List<String> sqls = new ArrayList<String>();
 		for (int i = 0; i < nodes.getLength(); i++) {
+			{
+//			String s = nodeToString(nodes.item(i));
+//			System.out.println(s);
+			}
 			String xml = nodeToxsltString(nodes.item(i), t24ToCommonTransformer);
 			DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
 			Document doc1 = dbf.newDocumentBuilder().parse(
@@ -393,8 +415,11 @@ public class DFDataProcessor implements Runnable {
 			 String updateQuery;
 			 if(Config.get("df.t24.db").equals("ORACLE")) {
 				 updateQuery =  "UPDATE \"F_DATA_EVENTS\" SET TS = CURRENT_TIMESTAMP where RECID in (";
+			 } else if(Config.get("df.t24.db").equals("MSSQL")) {
+				 updateQuery =  "UPDATE \"F_DATA_EVENTS\" SET TS = CURRENT_TIMESTAMP where RECID in (";
 			 } else {
-				 updateQuery = "UPDATE \"F.DF.DATA.EVENTS\" SET TIME_POLLED = '1393855502.1297' where DF_DATA_EVENT_ID in (";
+				 updateQuery =  "UPDATE \"F_DATA_EVENTS\" SET TS = CURRENT_TIMESTAMP where RECID in (";
+//				 updateQuery = "UPDATE \"F.DF.DATA.EVENTS\" SET TIME_POLLED = '1393855502.1297' where DF_DATA_EVENT_ID in (";
 			 }
 
 			 for(int i = 0; i<ids.size();i++) {

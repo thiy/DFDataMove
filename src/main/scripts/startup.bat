@@ -1,1 +1,1 @@
-java -jar DFDataMove.jar
+java -Xdebug -Xrunjdwp:server=y,transport=dt_socket,address=4000,suspend=n -jar DFDataMove.jar

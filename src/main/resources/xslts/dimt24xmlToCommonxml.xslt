@@ -64,6 +64,18 @@
 								<xsl:attribute name="withoutQuotes">true</xsl:attribute>
 								<xsl:value-of select="." />
 							</xsl:when>
+							<xsl:when test="@customValue ='DEFAULT'">
+								<xsl:attribute name="columnName"><xsl:value-of
+									select="name()" /></xsl:attribute>
+								<xsl:value-of select="." />
+							</xsl:when>
+							<xsl:when test="@customValue ='DEFAULT_DATE'">
+								<xsl:attribute name="columnName"><xsl:value-of
+									select="name()" /></xsl:attribute>
+								<xsl:attribute name="withoutQuotes">true</xsl:attribute>
+								<xsl:attribute name="customValue">TIMESTAMP</xsl:attribute>
+								<xsl:value-of select="." />
+							</xsl:when>
 							<xsl:otherwise>
 								<xsl:call-template name="replace-single-quote">
 									<xsl:with-param name="text" select="." />
